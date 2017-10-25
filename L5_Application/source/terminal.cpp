@@ -91,6 +91,13 @@ bool terminalTask::taskEntry()
     cp.addHandler(i2cIoHandler,   "i2c",   "'i2c read 0x01 0x02 <count>' : Reads <count> registers of device 0x01 starting from 0x02\n"
                                            "'i2c write 0x01 0x02 0x03'   : Writes 0x03 to device 0x01, reg 0x02\n"
                                            "'i2c discover' : Discovers all I2C devices on the BUS");
+
+    CMD_HANDLER_FUNC(myCmdHandler);
+    //Custom tasks
+
+    cp.addHandler(myCmdHandler,   "action",  "Four options: 'sProducer' or 'sConsumer' or 'rProducer' or 'rConsumer'");
+
+
 #if TERMINAL_USE_CAN_BUS_HANDLER
     CMD_HANDLER_FUNC(canBusHandler);
     cp.addHandler(canBusHandler,  "canbus", "'canbus init' : initialize CAN-1\n"

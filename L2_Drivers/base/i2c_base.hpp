@@ -68,6 +68,9 @@
 class I2C_Base
 {
     public:
+        uint8_t getIndex();
+        bool slaveInit(uint8_t inSlaveAddr, uint8_t *inBuff, uint32_t inSize);
+
         /**
          * When the I2C interrupt occurs, this function should be called to handle
          * future action to take due to the interrupt cause.
@@ -124,6 +127,7 @@ class I2C_Base
          */
         bool init(uint32_t pclk, uint32_t busRateInKhz);
 
+
         /**
          * Disables I2C operation
          * This can be used to disable all I2C operations in case of severe I2C Bus Failure
@@ -163,6 +167,17 @@ class I2C_Base
         /// The I2C Input Output frame that contains I2C transaction information
         mI2CTransaction_t mTransaction;
 
+        typedef struct
+        {
+                //
+           uint8_t *pSlaveAddress; ///< Slave Receive Buffer
+           uint8_t pSlaveIndex;
+//           uint8_t bufferSize;
+           uint8_t sCount;   ///<Slave Data Counter
+           bool firstByte;
+
+        } sI2CTransaction_t;
+        sI2CTransaction_t sTransaction;
         /**
          * When an interrupt occurs, this handles the I2C State Machine action
          * @returns The status of I2C State Machine, which are:

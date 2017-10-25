@@ -104,7 +104,7 @@ FRESULT Storage::read(const char* pFilename,  void* pData, unsigned int bytesToR
     return status;
 }
 
-FRESULT Storage::write(const char* pFilename, void* pData, unsigned int bytesToWrite, unsigned int offset)
+FRESULT Storage::write(const char* pFilename, const void* pData, unsigned int bytesToWrite, unsigned int offset)
 {
     FRESULT status = FR_INT_ERR;
     FIL file;

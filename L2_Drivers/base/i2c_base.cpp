@@ -20,6 +20,7 @@
 
 #include "i2c_base.hpp"
 #include "lpc_sys.h"
+#include "printf_lib.h"
 
 
 
@@ -34,7 +35,11 @@
 #define I2C_READ_ADDR(addr)         (addr | 1)      ///< Read address is ODD
 
 
+uint8_t I2C_Base::getIndex()
+{
 
+    return sTransaction.pSlaveIndex;
+}
 void I2C_Base::handleInterrupt()
 {
     /* If transfer finished (not busy), then give the signal */
@@ -146,6 +151,39 @@ I2C_Base::I2C_Base(LPC_I2C_TypeDef* pI2CBaseAddr) :
     }
 }
 
+bool I2C_Base::slaveInit(uint8_t inSlaveAddr, uint8_t *inBuff, uint32_t inSize)
+{
+    //Power on I2C
+    switch(mIRQ) {
+          case I2C0_IRQn: lpc_pconp(pconp_i2c0, true);  break;
+          case I2C1_IRQn: lpc_pconp(pconp_i2c1, true);  break;
+          case I2C2_IRQn: lpc_pconp(pconp_i2c2, true);  break;
+          default: return false;
+      }
+
+    //ignore address using mask
+    mpI2CRegs->I2CONCLR = 0x6C;           // Clear ALL I2C Flags
+
+    mpI2CRegs -> I2ADR0 = inSlaveAddr;
+    mpI2CRegs -> I2ADR1 = 0;
+    mpI2CRegs -> I2ADR2 = 0;
+    mpI2CRegs -> I2ADR3 = 0;
+
+    mpI2CRegs -> I2MASK0 = 0x00;
+    mpI2CRegs -> I2MASK1 = 0x00;
+    mpI2CRegs -> I2MASK2 = 0x00;
+    mpI2CRegs -> I2MASK3 = 0x00;
+    sTransaction.sCount = inSize;
+    sTransaction.pSlaveAddress = inBuff;
+
+    // Enable I2C and the interrupt for it
+    mpI2CRegs->I2CONSET = 0x44;
+    NVIC_EnableIRQ(mIRQ);
+    u0_dbg_printf("Slave Init finished\n");
+    return true;
+}
+
+
 bool I2C_Base::init(uint32_t pclk, uint32_t busRateInKhz)
 {
     // Power on I2C
@@ -237,6 +275,26 @@ I2C_Base::mStateMachineStatus_t I2C_Base::i2cStateMachine()
         readModeNackedBySlave = 0x48,
         dataAvailableAckSent  = 0x50,
         dataAvailableNackSent = 0x58,
+
+        //Slave Transmitter States
+        readReceivedAck = 0xA8,
+        lostReadAck = 0xB0,
+        dataTransAck = 0xB8,
+        dataTransNack = 0xC0,
+        lastTransAck = 0xC8,
+
+
+        //Slave Receiver States
+        writeReceivedAck = 0x60,
+        lostReadWriteAck = 0x68,
+        genCallAck = 0x70,
+        lostGenCallAck = 0x78,
+        dataReceivedAckSent = 0x80,
+        dataReceivedNackSent = 0x88,
+        genDataAck = 0x90,
+        genDataNack = 0x98,
+        stopRepStart = 0xA0
+
     };
 
     mStateMachineStatus_t state = busy;
@@ -324,8 +382,10 @@ I2C_Base::mStateMachineStatus_t I2C_Base::i2cStateMachine()
             }
             clearSIFlag();
             break;
+
         case dataAvailableAckSent:
             *mTransaction.pMasterData = mpI2CRegs->I2DAT;
+            u0_dbg_printf("Read %x\n", mpI2CRegs->I2DAT);
             ++mTransaction.pMasterData;
             --mTransaction.trxSize;
 
@@ -338,8 +398,10 @@ I2C_Base::mStateMachineStatus_t I2C_Base::i2cStateMachine()
 
             clearSIFlag();
             break;
+
         case dataAvailableNackSent: // Read last-byte from Slave
             *mTransaction.pMasterData = mpI2CRegs->I2DAT;
+            u0_dbg_printf("Read %x\n", mpI2CRegs->I2DAT);
             setStop();
             break;
 
@@ -347,6 +409,130 @@ I2C_Base::mStateMachineStatus_t I2C_Base::i2cStateMachine()
             // We should not issue stop() in this condition, but we still need to end our  transaction.
             state = I2C_READ_MODE(mTransaction.slaveAddr) ? readComplete : writeComplete;
             mTransaction.error = mpI2CRegs->I2STAT;
+            break;
+
+        case writeReceivedAck:    //State 0x60
+            u0_dbg_printf("State 0x60 \n");
+            sTransaction.firstByte = true;
+            setAckFlag();
+            clearSIFlag();
+
+            break;
+
+        case lostReadWriteAck: //State 0x68
+            u0_dbg_printf("State 0x68 \n");
+            mpI2CRegs->I2CONSET = 0x24;
+            clearSIFlag();
+            break;
+
+        case genCallAck: //State 0x70
+            u0_dbg_printf("State 0x70 \n");
+            setAckFlag();
+            clearSIFlag();
+            break;
+
+        case lostGenCallAck: //State 0x78
+            u0_dbg_printf("State 0x78 \n");
+            mpI2CRegs->I2CONSET = 0x24;
+            clearSIFlag();
+            break;
+
+        case dataReceivedAckSent: //State 0x80
+            u0_dbg_printf("%x \n", sTransaction.firstByte);
+
+            u0_dbg_printf("%x \n", mpI2CRegs -> I2DAT );
+            if (sTransaction.firstByte)
+            {
+                sTransaction.pSlaveIndex = mpI2CRegs -> I2DAT;
+                u0_dbg_printf("%x \n", sTransaction.pSlaveIndex );
+                u0_dbg_printf("%x \n", mpI2CRegs -> I2DAT );
+                sTransaction.firstByte = false;
+            }
+            else
+            {
+                sTransaction.pSlaveAddress[sTransaction.pSlaveIndex] = mpI2CRegs -> I2DAT;
+                //u0_dbg_printf("buffer %x",  *(sTransaction.pSlaveAddress + getIndex()));
+            }
+            --sTransaction.sCount;
+            if (sTransaction.sCount == 0)
+            {
+                setNackFlag();
+            }
+            else
+            {
+                setAckFlag();
+            }
+            clearSIFlag();
+            u0_dbg_printf("%x\n",mpI2CRegs -> I2DAT);
+            break;
+
+        case dataReceivedNackSent: //State 0x88
+            u0_dbg_printf("State 0x88 \n");
+            setAckFlag();
+            clearSIFlag();
+            break;
+
+        case genDataAck: //State 0x90
+            u0_dbg_printf("State 0x90 \n");
+            *sTransaction.pSlaveAddress = mpI2CRegs -> I2DAT;
+            mpI2CRegs->I2CONCLR = 0x0C;
+            break;
+
+        case genDataNack://State 0x98
+            u0_dbg_printf("State 0x98 \n");
+            setAckFlag();
+            clearSIFlag();
+            break;
+
+
+        case stopRepStart: //State 0xA0
+            u0_dbg_printf("State 0xA0 \n");
+
+            setAckFlag();
+            clearSIFlag();
+            break;
+
+            //
+        case readReceivedAck: //State 0xA8
+            u0_dbg_printf("State 0xA8 \n");
+
+            mpI2CRegs->I2DAT = sTransaction.pSlaveAddress[sTransaction.pSlaveIndex];
+
+            setAckFlag();
+            clearSIFlag();
+            //++sTransaction.pSlaveAddress;
+            break;
+
+
+        case lostReadAck: //State 0xB0
+            u0_dbg_printf("State 0xB0 \n");
+
+            mpI2CRegs->I2DAT = *sTransaction.pSlaveAddress;
+            mpI2CRegs->I2CONSET = 0x24;
+            ++sTransaction.pSlaveAddress;
+            clearSIFlag();
+            break;
+
+        case dataTransAck: //0xB8
+            u0_dbg_printf("State 0xB8 \n");
+
+            mpI2CRegs->I2DAT = *sTransaction.pSlaveAddress;
+            setAckFlag();
+            clearSIFlag();
+            ++sTransaction.pSlaveAddress;
+            break;
+        case dataTransNack: //State 0xC0
+            u0_dbg_printf("State 0xC0 \n");
+
+            setAckFlag();
+            clearSIFlag();
+            break;
+
+        case lastTransAck: //State 0xC8
+            u0_dbg_printf("State 0xC8 \n");
+
+            setAckFlag();
+            clearSIFlag();
             break;
 
         case slaveAddressNacked:    // no break

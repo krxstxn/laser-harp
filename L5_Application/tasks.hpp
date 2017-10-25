@@ -20,6 +20,7 @@
  * @file
  * @brief Contains FreeRTOS Tasks
  */
+
 #ifndef TASKS_HPP_
 #define TASKS_HPP_
 

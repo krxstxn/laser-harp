@@ -22,10 +22,9 @@
  * @brief Contains enumeration of shared handles used in the project.
  * @see   scheduler_task::addSharedHandle()
  */
+
 #ifndef SHARED_HANDLES_H__
 #define SHARED_HANDLES_H__
-
-
 
 /**
  * Enumeration of shared handles
@@ -35,7 +34,5 @@ enum {
     shared_SensorQueue,    ///< Shared handle used by examples (producer and consumer tasks)
     shared_learnSemaphore, ///< Terminal command gives this semaphore to remoteTask (IR sensor task)
 };
-
-
 
 #endif /* SHARED_HANDLES_H__ */

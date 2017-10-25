@@ -86,7 +86,7 @@ class Storage
          * @param bytesToWrite Number of bytes to write
          * @param offset       Optional Parameter: file offset to write data to file
          */
-        static FRESULT write(const char* pFilename, void* pData, unsigned int bytesToWrite, unsigned int offset=0);
+        static FRESULT write(const char* pFilename, const void* pData, unsigned int bytesToWrite, unsigned int offset=0);
 
         /**
          * Appends an existing file (creates a new file if it doesn't exist)
